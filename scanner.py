@@ -7,10 +7,10 @@ import random
 # --- Configuration ---
 TG_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TG_CHAT = os.getenv("TELEGRAM_CHAT_ID")
-VOL_X = float(os.getenv("VOLUME_MULTIPLIER", "1.1"))  # multiplier from secrets
+VOL_X = float(os.getenv("VOLUME_MULTIPLIER", "1.1"))  # multiplier for testing
 UA = {"User-Agent": "crypto-volume-scanner/1.0 (+https://github.com/rahuliniyan)"}
 
-# --- API endpoints ---
+# --- API Endpoints ---
 CG_MARKETS = "https://api.coingecko.com/api/v3/coins/markets"
 BN_EXINFO = "https://api.binance.com/api/v3/exchangeInfo"
 BN_KLINES = "https://api.binance.com/api/v3/klines"
@@ -41,7 +41,7 @@ def req_json(url, params=None, max_retries=3, base_sleep=0.5):
     return None
 
 def get_top200():
-    params = {"vs_currency":"usd", "order":"market_cap_desc", "per_page":200, "page":1, "sparkline":"false"}
+    params = {"vs_currency":"usd","order":"market_cap_desc","per_page":200,"page":1,"sparkline":"false"}
     return req_json(CG_MARKETS, params) or []
 
 def get_usdt_symbols():
@@ -66,7 +66,7 @@ def tg_send(text):
     try:
         r = requests.post(
             f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage",
-            json={"chat_id":TG_CHAT, "text":text, "parse_mode":"HTML"},
+            json={"chat_id":TG_CHAT,"text":text,"parse_mode":"HTML"},
             timeout=20
         )
         if r.status_code != 200:
@@ -82,6 +82,9 @@ def main():
     now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
     print(f"== Scan started at {now} ==")
 
+    # Test alert to confirm bot works
+    tg_send(f"💡 TEST ALERT: Scanner started at {now}")
+
     coins = get_top200()
     if not coins:
         print("❌ Failed to get top200 coins")
@@ -94,7 +97,6 @@ def main():
 
     scanned = 0
     alerts_sent = 0
-    test_alert_sent = False
 
     for c in coins:
         base = (c.get("symbol") or "").upper()
@@ -114,29 +116,8 @@ def main():
         curr = volumes[-2]  # last closed candle
         scanned += 1
 
-        ratio = curr/avg30 if avg30 else 0.0
-
-        # --- Test alert for first scanned coin ---
-        if not test_alert_sent:
-            price = c.get("current_price",0)
-            chg24 = c.get("price_change_percentage_24h",0) or 0.0
-            msg = (
-                f"✅ TEST ALERT: Scanned 1 coin\n"
-                f"• Coin: <b>{c.get('name','')} ({base})</b>\n"
-                f"• Pair: <b>{pair}</b>\n"
-                f"• Price: ${price:.6f}\n"
-                f"• 24h Change: {chg24:.2f}%\n"
-                f"• Last candle volume: {curr:.2f}\n"
-                f"• Avg30: {avg30:.2f}\n"
-                f"• Time: {now}"
-            )
-            tg_send(msg)
-            print("✅ Test alert sent")
-            test_alert_sent = True
-            alerts_sent += 1
-
-        # --- Real Telegram alerts ---
         if avg30>0 and curr >= VOL_X*avg30:
+            ratio = curr/avg30
             price = c.get("current_price",0)
             chg24 = c.get("price_change_percentage_24h",0) or 0.0
             msg = (
