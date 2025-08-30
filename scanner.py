@@ -94,22 +94,18 @@ def main():
 
     scanned = 0
     alerts_sent = 0
-    test_alert_sent = False
 
     for c in coins:
         base = (c.get("symbol") or "").upper()
         if base in ("USDT","USDC","BUSD","DAI","FRAX"):
-            print(f"Skipping stablecoin {base}")
             continue
         pair = f"{base}USDT"
         if pair not in usdt_pairs:
-            print(f"Skipping {pair}: not a USDT trading pair")
             continue
 
         klines = get_klines(pair)
         time.sleep(0.05)
         if not isinstance(klines, list) or len(klines)<31:
-            print(f"Skipping {pair}: insufficient klines")
             continue
 
         volumes = [float(k[5]) for k in klines]
@@ -118,36 +114,30 @@ def main():
         scanned += 1
 
         ratio = curr/avg30 if avg30 else 0.0
-        print(f"{pair}: last_volume={curr:.2f}, avg30={avg30:.2f}, ratio={ratio:.2f}x")
 
-        # --- Test alert logic ---
-        if not test_alert_sent:
-            msg = f"✅ TEST ALERT: Scanned {scanned} coins. Last scanned pair: {pair} at {now}"
+        # --- Log potential spikes ---
+        if avg30>0 and ratio>1.0:
+            print(f"[Potential] {pair}: last_vol={curr:.2f}, avg30={avg30:.2f}, ratio={ratio:.2f}x")
+
+        # --- Real Telegram alerts ---
+        if avg30>0 and curr >= VOL_X*avg30:
+            price = c.get("current_price",0)
+            chg24 = c.get("price_change_percentage_24h",0) or 0.0
+            msg = (
+                f"🚨 <b>5m Volume Spike</b>\n"
+                f"• Coin: <b>{c.get('name','')} ({base})</b>\n"
+                f"• Pair: <b>{pair}</b>\n"
+                f"• Price: ${price:.6f}\n"
+                f"• 24h Change: {chg24:.2f}%\n"
+                f"• Spike: <b>{ratio:.2f}×</b>\n"
+                f"• Time: {now}"
+            )
             tg_send(msg)
-            print("✅ Test alert sent")
-            test_alert_sent = True
+            alerts_sent += 1
+            print(f"🚨 ALERT sent for {pair} (ratio {ratio:.2f}x)")
 
-        # --- Real alert logic (uncomment after testing) ---
-        # if avg30>0 and curr >= VOL_X*avg30:
-        #     price = c.get("current_price",0)
-        #     chg24 = c.get("price_change_percentage_24h",0) or 0.0
-        #     msg = (
-        #         f"🚨 <b>5m Volume Spike</b>\n"
-        #         f"• Coin: <b>{c.get('name','')} ({base})</b>\n"
-        #         f"• Pair: <b>{pair}</b>\n"
-        #         f"• Price: ${price:.6f}\n"
-        #         f"• 24h Change: {chg24:.2f}%\n"
-        #         f"• Spike: <b>{ratio:.2f}×</b>\n"
-        #         f"• Time: {now}"
-        #     )
-        #     tg_send(msg)
-        #     alerts_sent += 1
-        #     print(f"🚨 ALERT sent for {pair} (ratio {ratio:.2f}x)")
-
-    print(f"== Scan completed: scanned={scanned}, test alert sent={test_alert_sent}, real alerts={alerts_sent} ==")
+    print(f"== Scan completed: scanned={scanned}, alerts sent={alerts_sent} ==")
     return 0
 
 if __name__=="__main__":
     main()
-
-
