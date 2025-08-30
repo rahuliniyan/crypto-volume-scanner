@@ -1,16 +1,19 @@
-import os, time, math, json, random, requests
+import os, time, math, json, random, requests, sys
 from datetime import datetime
 
+# --- Config from environment ---
 TG_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TG_CHAT  = os.getenv("TELEGRAM_CHAT_ID")
 VOL_X    = float(os.getenv("VOLUME_MULTIPLIER", "2.0"))
 
+# --- API endpoints ---
 CG_MARKETS = "https://api.coingecko.com/api/v3/coins/markets"
 BN_EXINFO  = "https://api.binance.com/api/v3/exchangeInfo"
 BN_KLINES  = "https://api.binance.com/api/v3/klines"
 
 UA = {"User-Agent": "volume-scanner/1.0 (+https://github.com/)"}
 
+# --- Helpers ---
 def req_json(url, params=None, max_retries=4, base_sleep=0.6):
     for i in range(max_retries):
         try:
@@ -77,20 +80,30 @@ def tg_send(text):
         print(f"Telegram exception: {e}")
         return False
 
+# --- Main ---
 def main():
     if not TG_TOKEN or not TG_CHAT:
-        print("Missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID"); return 1
+        print("Missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID")
+        return 1
+
+    # --- Test mode ---
+    if "--test" in sys.argv:
+        print("Running in test mode — sending dummy alert")
+        tg_send("🚨 TEST ALERT: Bot is working ✅")
+        return 0
 
     now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
     print(f"== Scan start {now} ==")
 
     coins = get_top500()
     if not coins:
-        print("No top500 data; exiting gracefully"); return 0
+        print("No top500 data; exiting gracefully")
+        return 0
 
     usdt = get_usdt_symbols()
     if not usdt:
-        print("No Binance USDT symbols; exiting gracefully"); return 0
+        print("No Binance USDT symbols; exiting gracefully")
+        return 0
 
     scanned = 0; alerts = 0
     for c in coins:
@@ -106,8 +119,10 @@ def main():
         if not isinstance(kls, list) or len(kls) < 31:
             continue
 
-        vols = [float(row) for row in kls]
-        avg30 = sma(vols[-31:-1]); curr = vols[-1]
+        # ✅ FIX: use row[5] (volume)
+        vols = [float(row[5]) for row in kls]
+        avg30 = sma(vols[-31:-1])
+        curr = vols[-1]
         scanned += 1
 
         if avg30 > 0 and curr > VOL_X * avg30:
@@ -123,7 +138,8 @@ def main():
                 f"• Spike: <b>{ratio:.1f}×</b> normal\n"
                 f"• Time: {now}"
             )
-            tg_send(msg); alerts += 1
+            tg_send(msg)
+            alerts += 1
 
     print(f"== Scan done: scanned={scanned}, alerts={alerts} ==")
     return 0
