@@ -94,6 +94,7 @@ def main():
 
     scanned = 0
     alerts_sent = 0
+    test_alert_sent = False
 
     for c in coins:
         base = (c.get("symbol") or "").upper()
@@ -115,9 +116,24 @@ def main():
 
         ratio = curr/avg30 if avg30 else 0.0
 
-        # --- Log potential spikes ---
-        if avg30>0 and ratio>1.0:
-            print(f"[Potential] {pair}: last_vol={curr:.2f}, avg30={avg30:.2f}, ratio={ratio:.2f}x")
+        # --- Test alert for first scanned coin ---
+        if not test_alert_sent:
+            price = c.get("current_price",0)
+            chg24 = c.get("price_change_percentage_24h",0) or 0.0
+            msg = (
+                f"✅ TEST ALERT: Scanned 1 coin\n"
+                f"• Coin: <b>{c.get('name','')} ({base})</b>\n"
+                f"• Pair: <b>{pair}</b>\n"
+                f"• Price: ${price:.6f}\n"
+                f"• 24h Change: {chg24:.2f}%\n"
+                f"• Last candle volume: {curr:.2f}\n"
+                f"• Avg30: {avg30:.2f}\n"
+                f"• Time: {now}"
+            )
+            tg_send(msg)
+            print("✅ Test alert sent")
+            test_alert_sent = True
+            alerts_sent += 1
 
         # --- Real Telegram alerts ---
         if avg30>0 and curr >= VOL_X*avg30:
